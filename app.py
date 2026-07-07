@@ -3,181 +3,253 @@ import networkx as nx
 from pyvis.network import Network
 import os
 
-# 1. Configuración de página obligatoria al inicio
+# 1. Configuración obligatoria de la página al inicio
 st.set_page_config(page_title="UCE-MATCH v2", layout="wide")
 
-# Diccionario Jerárquico Exacto con las 3 Áreas de la UCE
-ESTRUCTURA_UCE = {
-    "Área de Ciencia, Tecnología e Ingeniería": {
-        "Ingeniería en Sistemas de la Información": {
-            "1° Semestre": ["Algoritmos y Lógica", "Álgebra Lineal", "Cálculo Diferencial", "Física Básica"],
-            "2° Semestre": ["Programación Orientada a Objetos", "Cálculo Integral", "Matemáticas Discretas", "Estructuras de Datos"]
-        },
-        "Ingeniería Civil": {
-            "1° Semestre": ["Introducción a la Ingeniería Civil", "Geometría Descriptiva", "Cálculo Diferencial"],
-            "2° Semestre": ["Mecánica Racional", "Topografía I", "Cálculo Integral"]
-        }
+# ==========================================
+# DISEÑO Y ESTILOS PERSONALIZADOS (CSS INTERNO)
+# ==========================================
+st.markdown("""
+    <style>
+    /* Cambiar el fondo del bloque de métricas */
+    [data-testid="stMetricValue"] {
+        color: #1A365D;
+        font-weight: bold;
+    }
+    /* Estilizar botones primarios con el color azul institucional */
+    div.stButton > button:first-child {
+        border-radius: 8px;
+    }
+    div.stButton > button[kind="primary"] {
+        background-color: #1A365D;
+        color: white;
+        border: none;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #2A4D7C;
+        color: white;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Estructura oficial del proyecto
+ESTRUCTURA_ÁREAS = {
+    "Ciencias Exactas": {
+        "carreras": [
+            "Ing. Civil", "Sistemas", "Computación", "Matemáticas", "Geología", 
+            "Petróleos", "Minas", "Diseño Industrial", "Mecánica", "Ing. Ambiental", 
+            "Ing. Química", "Bioprocesos"
+        ],
+        "materias_comun": [
+            "Análisis I (Cálculo I)", "Análisis II (Cálculo II)", "Programación", 
+            "Introducción al Análisis Matemático", "Geometría Descriptiva", "Química General"
+        ]
     },
-    "Área de Ciencias de la Salud": {
-        "Medicina": {
-            "1° Semestre": ["Anatomía Humana I", "Histología", "Biología Celular"],
-            "2° Semestre": ["Anatomía Humana II", "Fisiología I", "Bioquímica Médica"]
-        },
-        "Enfermería": {
-            "1° Semestre": ["Anatomía y Fisiología Básica", "Socioantropología", "Fundamentos de Enfermería I"],
-            "2° Semestre": ["Bioquímica Descriptiva", "Microbiología y Parasitología", "Fundamentos de Enfermería II"]
-        }
+    "Artes y Arquitectura": {
+        "carreras": ["Artes Escénicas", "Artes Musicales", "Artes Plásticas", "Danza", "Arquitectura y Urbanismo"],
+        "materias_comun": [
+            "Movimiento y Voz Auténticos/Primarios", "Armonía, Contrapunto y Entrenamiento Auditivo II", 
+            "Morfología", "Técnicas de Danza Contemporánea: Inicial II", "Taller de Diseño Básico II"
+        ]
     },
-    "Área de Ciencias Sociales y Humanidades": {
-        "Derecho": {
-            "1° Semestre": ["Introducción al Derecho", "Derecho Romano", "Historia del Derecho"],
-            "2° Semestre": ["Teoría del Estado", "Derecho Civil I (Personas)", "Sociología Jurídica"]
-        },
-        "Administración de Empresas": {
-            "1° Semestre": ["Fundamentos de Administración", "Contabilidad General I", "Matemática Financiera"],
-            "2° Semestre": ["Procesos Administrativos", "Contabilidad de Costos", "Microeconomía I"]
-        }
+    "Ciencias de la Vida": {
+        "carreras": ["Biología", "Agronomía", "Medicina Veterinaria", "Turismo", "Química", "Recursos Naturales Renovables", "Bioquímica y Farmacia"],
+        "materias_comun": [
+            "Análisis I (Cálculo I)", "Química Orgánica", "Anatomía Animal I", 
+            "Contabilidad / Matemática Financiera", "Física I", "Topografía I", "Química Inorgánica"
+        ]
+    },
+    "Ciencias de la Salud Humana": {
+        "carreras": [
+            "Medicina", "Enfermería", "Obstetricia", "Laboratorio Clínico", "Imageneología y Radiología", 
+            "Fonoaudiología", "Fisioterapia", "Terapia Ocupacional", "Atención Prehospitalaria", 
+            "Psicología Clínica", "Psicología Educativa", "Odontología", "Pedagogía de la Act. Física", 
+            "Entrenamiento Deportivo"
+        ],
+        "materias_comun": [
+            "Anatomía Humana I", "Bioquímica Aplicada", "Embriología y Genética", "Química Analítica", 
+            "Física Radiológica", "Anatomofisiología", "Biomecánica General", "Neuroanatomía Funcional", 
+            "Soporte Vital Básico", "Neurofisiología", "Bases Biológicas del Comportamiento", 
+            "Histología Estomatológica", "Anatomía Funcional y del Movimiento", "Fisiología del Esfuerzo Físico"
+        ]
     }
 }
 
-# 2. Inicializar la memoria temporal en segundo plano si no existe
+# 2. Inicializar variables de estado de la sesión
+if "paso" not in st.session_state:
+    st.session_state.paso = 1  
+if "rol" not in st.session_state:
+    st.session_state.rol = None  
 if "estudiantes" not in st.session_state:
     st.session_state.estudiantes = []
 if "tutores" not in st.session_state:
     st.session_state.tutores = []
 
-# 3. Creación de las Pestañas (Tabs)
-tab_registro, tab_grafo = st.tabs(["📝 Registrar Datos", "🌐 Ver Grafo Interactivo"])
+# ==========================================
+# ENCABEZADO INSTITUCIONAL CON TU LOGO PNG
+# ==========================================
+col_logo, col_titulo = st.columns([1, 5])
+
+NOMBRE_LOGO = "Logo_Universidad_Central_del_Ecuador.png"
+
+with col_logo:
+    if os.path.exists(NOMBRE_LOGO):
+        st.image(NOMBRE_LOGO, width=110)
+    else:
+        st.warning(f"Falta el archivo '{NOMBRE_LOGO}' en la carpeta")
+
+with col_titulo:
+    # CORRECCIÓN: El color de UNIVERSIDAD CENTRAL DEL ECUADOR ahora es white (blanco)
+    st.markdown("""
+        <div style="padding-top: 5px;">
+            <h1 style="color: white; margin-bottom: 0px; font-family: 'Helvetica Neue', sans-serif;">UNIVERSIDAD CENTRAL DEL ECUADOR</h1>
+            <h3 style="color: #D69E2E; margin-top: 0px; font-weight: 400; font-family: 'Helvetica Neue', sans-serif;">UCE-MATCH v2: Optimización de Tutorías Académicas</h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+st.write(f"**Progreso actual: Paso {st.session_state.paso} de 3**")
+st.progress(st.session_state.paso / 3)
+st.write("---")
 
 # ==========================================
-# PESTAÑA 1: FORMULARIOS DE INGRESO
+# PASO 1: SELECCIÓN OBLIGATORIA DE ROL
 # ==========================================
-with tab_registro:
-    st.title("Ingreso de Datos con Selección Jerárquica Real")
-    st.write("Filtros dinámicos adaptados exclusivamente para el ciclo básico (Primer y Segundo Semestre).")
+if st.session_state.paso == 1:
+    st.markdown("<h3 style='text-align: center; color: #2D3748;'>🎯 Paso 1: Elija cómo desea ingresar al sistema</h3>", unsafe_allow_html=True)
+    st.write("")
+    
+    col_e, col_t = st.columns(2)
+    
+    with col_e:
+        st.info("### 👨‍🎓 Modo Estudiante\nSi necesitas refuerzo académico, resolver dudas o prepararte para exámenes en materias críticas.")
+        if st.button("Ingresar como Estudiante", use_container_width=True):
+            st.session_state.rol = "Estudiante"
+            st.session_state.paso = 2
+            st.rerun()
+            
+    with col_t:
+        st.success("### 👨‍🏫 Modo Tutor\nSi eres estudiante de semestres superiores o docente y deseas ofertar tus horas de acompañamiento académico.")
+        if st.button("Ingresar como Tutor", use_container_width=True):
+            st.session_state.rol = "Tutor"
+            st.session_state.paso = 2
+            st.rerun()
+
+# ==========================================
+# PASO 2: LLENADO DEL FORMULARIO CON TIPO DE ASISTENCIA
+# ==========================================
+elif st.session_state.paso == 2:
+    st.subheader(f"📝 Paso 2: Formulario de Registro para {st.session_state.rol}")
     
     col1, col2 = st.columns(2)
     
-    # Formulario para Estudiantes
-    with col1:
-        st.subheader("👨‍🎓 Datos del Estudiante")
-        
-        # Selectores REACTIVOS (Fuera del form para que actualicen al cambiar)
-        nom_est = st.text_input("Nombres", key="input_nom_est")
-        ape_est = st.text_input("Apellidos", key="input_ape_est")
-        
-        area_est = st.selectbox("Seleccione el Área", list(ESTRUCTURA_UCE.keys()), key="area_e")
-        carrera_est = st.selectbox("Seleccione la Carrera", list(ESTRUCTURA_UCE[area_est].keys()), key="carrera_e")
-        sem_est = st.selectbox("Seleccione el Semestre", ["1° Semestre", "2° Semestre"], key="sem_e")
-        materia_est = st.selectbox("Materia que requiere tutoría", ESTRUCTURA_UCE[area_est][carrera_est][sem_est], key="materia_e")
-        
-        rango_horas_est = st.slider(
-            "Disponibilidad Horaria",
-            value=(14, 18), min_value=7, max_value=22, format="%d:00", key="horas_e"
-        )
-        
-        # Formulario solo para encapsular el botón de envío seguro
-        with st.form("form_guardar_estudiante"):
-            btn_est = st.form_submit_button("Guardar Estudiante")
-            if btn_est:
-                if nom_est.strip() and ape_est.strip():
-                    nombre_completo = f"{nom_est.strip()} {ape_est.strip()}"
-                    st.session_state.estudiantes.append({
-                        "nombre": nombre_completo,
-                        "area": area_est,
-                        "carrera": carrera_est,
-                        "semestre": sem_est,
-                        "materia": materia_est,
-                        "hora_inicio": rango_horas_est[0],
-                        "hora_fin": rango_horas_est[1]
-                    })
-                    st.success(f"Estudiante '{nombre_completo}' registrado con éxito.")
-                else:
-                    st.error("Por favor, llena los campos de nombre y apellido.")
+    if st.session_state.rol == "Estudiante":
+        with col1:
+            nom_est = st.text_input("Nombres", key="nom_e")
+            ape_est = st.text_input("Apellidos", key="ape_e")
+            rango_horas_est = st.slider("Disponibilidad Horaria", value=(14, 18), min_value=7, max_value=22, format="%d:00", key="horas_e")
+            tipo_asistencia_est = st.selectbox("Tipo de Asistencia Preferido", ["Presencial", "Virtual", "Indiferente (Cualquiera)"], key="tipo_as_e")
+            
+        with col2:
+            area_est = st.selectbox("Seleccione su Área de Conocimiento", list(ESTRUCTURA_ÁREAS.keys()), key="area_e")
+            carrera_est = st.selectbox("Seleccione su Carrera", ESTRUCTURA_ÁREAS[area_est]["carreras"], key="carrera_e")
+            materia_est = st.selectbox("Materia Crítica Requerida", sorted(ESTRUCTURA_ÁREAS[area_est]["materias_comun"]), key="materia_e")
+            
+        c_atras, c_sig = st.columns([1, 4])
+        if c_atras.button("⬅ Regresar", use_container_width=True):
+            st.session_state.paso = 1
+            st.rerun()
+        if c_sig.button("Guardar Registro y Ver Grafo ➡", type="primary", use_container_width=True):
+            if nom_est.strip() and ape_est.strip():
+                nombre_completo = f"{nom_est.strip()} {ape_est.strip()}"
+                st.session_state.estudiantes.append({
+                    "nombre": nombre_completo, "area": area_est, "carrera": carrera_est,
+                    "materia": materia_est, "hora_inicio": rango_horas_est[0], "hora_fin": rango_horas_est[1],
+                    "asistencia": tipo_asistencia_est
+                })
+                st.session_state.paso = 3
+                st.rerun()
+            else:
+                st.error("Por favor, rellene los campos de nombres y apellidos antes de continuar.")
 
-    # Formulario para Tutores
-    with col2:
-        st.subheader("👨‍🏫 Datos del Tutor")
-        
-        # Selectores REACTIVOS (Fuera del form)
-        nom_tut = st.text_input("Nombres", key="input_nom_tut")
-        ape_tut = st.text_input("Apellidos", key="input_ape_tut")
-        
-        area_tut = st.selectbox("Seleccione el Área", list(ESTRUCTURA_UCE.keys()), key="area_t")
-        carrera_tut = st.selectbox("Seleccione la Carrera", list(ESTRUCTURA_UCE[area_tut].keys()), key="carrera_t")
-        sem_tut = st.selectbox("Nivel de la Materia", ["1° Semestre", "2° Semestre"], key="sem_t")
-        materia_tut = st.selectbox("Materia que puede dictar", ESTRUCTURA_UCE[area_tut][carrera_tut][sem_tut], key="materia_t")
-        
-        rango_horas_tut = st.slider(
-            "Disponibilidad Horaria",
-            value=(13, 17), min_value=7, max_value=22, format="%d:00", key="horas_t"
-        )
-        
-        with st.form("form_guardar_tutor"):
-            btn_tut = st.form_submit_button("Guardar Tutor")
-            if btn_tut:
-                if nom_tut.strip() and ape_tut.strip():
-                    nombre_completo = f"{nom_tut.strip()} {ape_tut.strip()}"
-                    st.session_state.tutores.append({
-                        "nombre": nombre_completo,
-                        "area": area_tut,
-                        "carrera": carrera_tut,
-                        "semestre": sem_tut,
-                        "materia": materia_tut,
-                        "hora_inicio": rango_horas_tut[0],
-                        "hora_fin": rango_horas_tut[1]
-                    })
-                    st.success(f"Tutor '{nombre_completo}' registrado con éxito.")
-                else:
-                    st.error("Por favor, llena los campos de nombre y apellido.")
-
-    st.write("---")
-    c1, c2 = st.columns(2)
-    c1.metric("Estudiantes en Cola", len(st.session_state.estudiantes))
-    c2.metric("Tutores en Cola", len(st.session_state.tutores))
-
+    elif st.session_state.rol == "Tutor":
+        with col1:
+            nom_tut = st.text_input("Nombres", key="nom_t")
+            ape_tut = st.text_input("Apellidos", key="ape_t")
+            rango_horas_tut = st.slider("Disponibilidad Horaria", value=(13, 17), min_value=7, max_value=22, format="%d:00", key="horas_t")
+            tipo_asistencia_tut = st.selectbox("Tipo de Asistencia Ofertado", ["Presencial", "Virtual", "Ambas Modalidades"], key="tipo_as_t")
+            
+        with col2:
+            area_tut = st.selectbox("Seleccione el Área de Competencia", list(ESTRUCTURA_ÁREAS.keys()), key="area_t")
+            carrera_tut = st.selectbox("Seleccione la Carrera de Origen", ESTRUCTURA_ÁREAS[area_tut]["carreras"], key="carrera_t")
+            materia_tut = st.selectbox("Materia Crítica a Dictar", sorted(ESTRUCTURA_ÁREAS[area_tut]["materias_comun"]), key="materia_t")
+            
+        c_atras, c_sig = st.columns([1, 4])
+        if c_atras.button("⬅ Regresar", use_container_width=True):
+            st.session_state.paso = 1
+            st.rerun()
+        if c_sig.button("Guardar Registro y Ver Grafo ➡", type="primary", use_container_width=True):
+            if nom_tut.strip() and ape_tut.strip():
+                nombre_completo = f"{nom_tut.strip()} {ape_tut.strip()}"
+                st.session_state.tutores.append({
+                    "nombre": nombre_completo, "area": area_tut, "carrera": carrera_tut,
+                    "materia": materia_tut, "hora_inicio": rango_horas_tut[0], "hora_fin": rango_horas_tut[1],
+                    "asistencia": tipo_asistencia_tut
+                })
+                st.session_state.paso = 3
+                st.rerun()
+            else:
+                st.error("Por favor, rellene los campos de nombres y apellidos antes de continuar.")
 
 # ==========================================
-# PESTAÑA 2: VISUALIZACIÓN DINÁMICA DEL GRAFO
+# PASO 3: VISUALIZACIÓN DEL GRAFO GENERADO
 # ==========================================
-with tab_grafo:
-    st.title("Visualización Dinámica del Grafo")
-    st.write("Conexiones automáticas basadas exclusivamente en coincidencia de **Materia** y cruce en la **Disponibilidad Horaria**.")
+elif st.session_state.paso == 3:
+    st.subheader("🌐 Paso 3: Red de Emparejamiento Generada")
     
-    if len(st.session_state.estudiantes) == 0 and len(st.session_state.tutores) == 0:
-        st.info("Aún no hay registros en la sesión actual. Llena los formularios para mapear las aristas.")
-    else:
-        G = nx.Graph()
+    if st.button("⬅ Volver al Inicio (Registrar otro perfil)"):
+        st.session_state.paso = 1
+        st.session_state.rol = None
+        st.rerun()
         
-        # Insertar nodos de Estudiantes
-        for est in st.session_state.estudiantes:
-            info_hover = f"Estudiante: {est['nombre']}\n{est['carrera']} ({est['semestre']})\nMateria: {est['materia']}\nHorario: {est['hora_inicio']}:00 a {est['hora_fin']}:00"
-            G.add_node(est["nombre"], label=est["nombre"], color="#2ecc71", title=info_hover, size=20)
-            
-        # Insertar nodos de Tutores
+    st.write("---")
+    
+    G = nx.Graph()
+    
+    for est in st.session_state.estudiantes:
+        hover = f"**Estudiante:** {est['nombre']}\n**Área:** {est['area']}\n**Carrera:** {est['carrera']}\n**Materia:** {est['materia']}\n**Horario:** {est['hora_inicio']}:00 - {est['hora_fin']}:00\n**Modalidad:** {est['asistencia']}"
+        G.add_node(est["nombre"], label=est["nombre"], color="#2ecc71", title=hover, size=20)
+        
+    for tut in st.session_state.tutores:
+        hover = f"**Tutor:** {tut['nombre']}\n**Área:** {tut['area']}\n**Carrera:** {tut['carrera']}\n**Materia Ofertada:** {tut['materia']}\n**Horario:** {tut['hora_inicio']}:00 - {tut['hora_fin']}:00\n**Modalidad:** {tut['asistencia']}"
+        G.add_node(tut["nombre"], label=tut["nombre"], color="#9b59b6", title=hover, size=24)
+        
+    for est in st.session_state.estudiantes:
         for tut in st.session_state.tutores:
-            info_hover = f"Tutor: {tut['nombre']}\n{tut['carrera']} ({tut['semestre']})\nMateria: {tut['materia']}\nHorario: {tut['hora_inicio']}:00 a {tut['hora_fin']}:00"
-            G.add_node(tut["nombre"], label=tut["nombre"], color="#3498db", title=info_hover, size=25)
-            
-        # Algoritmo de Emparejamiento por Grafos
-        for est in st.session_state.estudiantes:
-            for tut in st.session_state.tutores:
-                misma_materia = (est["materia"] == tut["materia"])
-                cruce_horario = (max(est["hora_inicio"], tut["hora_inicio"]) < min(est["hora_fin"], tut["hora_fin"]))
+            if est["materia"] == tut["materia"]:
+                se_cruzan = (max(est["hora_inicio"], tut["hora_inicio"]) < min(est["hora_fin"], tut["hora_fin"]))
+                modalidad_compatible = (
+                    est["asistencia"] == "Indiferente (Cualquiera)" or 
+                    tut["asistencia"] == "Ambas Modalidades" or 
+                    est["asistencia"] == tut["asistencia"]
+                )
                 
-                if misma_materia and cruce_horario:
-                    h_inicio_match = max(est["hora_inicio"], tut["hora_inicio"])
-                    h_fin_match = min(est["hora_fin"], tut["hora_fin"])
+                if se_cruzan and modalidad_compatible:
+                    h_i = max(est["hora_inicio"], tut["hora_inicio"])
+                    h_f = min(est["hora_fin"], tut["hora_fin"])
                     
+                    asistencia_final = est["asistencia"] if est["asistencia"] != "Indiferente (Cualquiera)" else tut["asistencia"]
+                    if asistencia_final == "Ambas Modalidades":
+                        asistencia_final = "A convenir"
+                        
                     G.add_edge(
-                        est["nombre"], 
-                        tut["nombre"], 
-                        title=f"Match en {est['materia']}\nCruce: {h_inicio_match}:00 - {h_fin_match}:00\n({est['semestre']})",
-                        color="#e74c3c", 
-                        width=3
+                        est["nombre"], tut["nombre"], 
+                        title=f"Match en {est['materia']}\nHorario: {h_i}:00 - {h_f}:00\nModalidad: {asistencia_final}",
+                        color="#e67e22", width=3
                     )
-
-        # Configurar y renderizar PyVis
+                    
+    if len(G.nodes) == 0:
+        st.info("Aún no hay perfiles procesados en la memoria volátil de esta sesión.")
+    else:
         net = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
         net.from_nx(G)
         net.toggle_physics(True)
@@ -190,4 +262,9 @@ with tab_grafo:
                     html_content = f.read()
                 st.components.v1.html(html_content, height=620)
         except Exception as e:
-            st.error(f"Ocurrió un inconveniente al compilar el grafo: {e}")
+            st.error(f"Error al compilar el grafo interactivo: {e}")
+            
+    st.write("---")
+    c1, c2 = st.columns(2)
+    c1.metric("Estudiantes Totales en Red", len(st.session_state.estudiantes))
+    c2.metric("Tutores Totales Activos", len(st.session_state.tutores))
