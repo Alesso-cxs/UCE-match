@@ -77,8 +77,8 @@ ESTRUCTURA_ÁREAS = {
     }
 }
 
-# ⚠️ REEMPLAZA ESTE LINK POR EL DE TU GOOGLE SHEETS REAL ⚠️
-URL_SHEETS = "https://docs.google.com/spreadsheets/d/TU_ID_DE_SHEET_AQUÍ/edit?usp=sharing"
+# 🔗 Enlace corregido y limpio de tu documento real
+URL_SHEETS = "https://docs.google.com/spreadsheets/d/1os6jZgGLayMMVu5P_ltainpvKw-VSrva9UVmW_uhwIw/"
 
 # Conexión con Google Sheets
 try:
