@@ -77,7 +77,7 @@ ESTRUCTURA_ÁREAS = {
     }
 }
 
-# 🔗 Enlace corregido y limpio de tu documento real
+# 🔗 Tu nuevo enlace limpio e integrado
 URL_SHEETS = "https://docs.google.com/spreadsheets/d/1os6jZgGLayMMVu5P_ltainpvKw-VSrva9UVmW_uhwIw/"
 
 # Conexión con Google Sheets
