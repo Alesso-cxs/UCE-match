@@ -1,6 +1,8 @@
 import streamlit as st
 import networkx as nx
 from pyvis.network import Network
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 import os
 
 # 1. Configuración obligatoria de la página al inicio
@@ -75,31 +77,34 @@ ESTRUCTURA_ÁREAS = {
     }
 }
 
-# 2. Inicializar variables de estado de la sesión
+# ⚠️ REEMPLAZA ESTE LINK POR EL DE TU GOOGLE SHEETS REAL ⚠️
+URL_SHEETS = "https://docs.google.com/spreadsheets/d/TU_ID_DE_SHEET_AQUÍ/edit?usp=sharing"
+
+# Conexión con Google Sheets
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception:
+    conn = None
+
+# Inicializar variables de navegación
 if "paso" not in st.session_state:
     st.session_state.paso = 1  
 if "rol" not in st.session_state:
     st.session_state.rol = None  
-if "estudiantes" not in st.session_state:
-    st.session_state.estudiantes = []
-if "tutores" not in st.session_state:
-    st.session_state.tutores = []
 
 # ==========================================
 # ENCABEZADO INSTITUCIONAL CON TU LOGO PNG
 # ==========================================
 col_logo, col_titulo = st.columns([1, 5])
-
 NOMBRE_LOGO = "Logo_Universidad_Central_del_Ecuador.png"
 
 with col_logo:
     if os.path.exists(NOMBRE_LOGO):
         st.image(NOMBRE_LOGO, width=110)
     else:
-        st.warning(f"Falta el archivo '{NOMBRE_LOGO}' en la carpeta")
+        st.warning(f"Falta el archivo '{NOMBRE_LOGO}'")
 
 with col_titulo:
-    # CORRECCIÓN: El color de UNIVERSIDAD CENTRAL DEL ECUADOR ahora es white (blanco)
     st.markdown("""
         <div style="padding-top: 5px;">
             <h1 style="color: white; margin-bottom: 0px; font-family: 'Helvetica Neue', sans-serif;">UNIVERSIDAD CENTRAL DEL ECUADOR</h1>
@@ -121,21 +126,21 @@ if st.session_state.paso == 1:
     col_e, col_t = st.columns(2)
     
     with col_e:
-        st.info("### 👨‍🎓 Modo Estudiante\nSi necesitas refuerzo académico, resolver dudas o prepararte para exámenes en materias críticas.")
+        st.info("### 👨‍🎓 Modo Estudiante\nSi necesitas refuerzo académico, resolver dudas o prepararte para exámenes.")
         if st.button("Ingresar como Estudiante", use_container_width=True):
             st.session_state.rol = "Estudiante"
             st.session_state.paso = 2
             st.rerun()
             
     with col_t:
-        st.success("### 👨‍🏫 Modo Tutor\nSi eres estudiante de semestres superiores o docente y deseas ofertar tus horas de acompañamiento académico.")
+        st.success("### 👨‍🏫 Modo Tutor\nSi eres estudiante de semestres superiores y deseas ofertar acompañamiento académico.")
         if st.button("Ingresar como Tutor", use_container_width=True):
             st.session_state.rol = "Tutor"
             st.session_state.paso = 2
             st.rerun()
 
 # ==========================================
-# PASO 2: LLENADO DEL FORMULARIO CON TIPO DE ASISTENCIA
+# PASO 2: FORMULARIO DE REGISTRO EN LA NUBE
 # ==========================================
 elif st.session_state.paso == 2:
     st.subheader(f"📝 Paso 2: Formulario de Registro para {st.session_state.rol}")
@@ -158,18 +163,24 @@ elif st.session_state.paso == 2:
         if c_atras.button("⬅ Regresar", use_container_width=True):
             st.session_state.paso = 1
             st.rerun()
-        if c_sig.button("Guardar Registro y Ver Grafo ➡", type="primary", use_container_width=True):
+        if c_sig.button("Guardar Registro Global ➡", type="primary", use_container_width=True):
             if nom_est.strip() and ape_est.strip():
-                nombre_completo = f"{nom_est.strip()} {ape_est.strip()}"
-                st.session_state.estudiantes.append({
-                    "nombre": nombre_completo, "area": area_est, "carrera": carrera_est,
+                nuevo_registro = pd.DataFrame([{
+                    "nombre": f"{nom_est.strip()} {ape_est.strip()}", "area": area_est, "carrera": carrera_est,
                     "materia": materia_est, "hora_inicio": rango_horas_est[0], "hora_fin": rango_horas_est[1],
                     "asistencia": tipo_asistencia_est
-                })
-                st.session_state.paso = 3
-                st.rerun()
+                }])
+                try:
+                    df_actual = conn.read(spreadsheet=URL_SHEETS, worksheet="Estudiantes", ttl=0)
+                    df_final = pd.concat([df_actual, nuevo_registro], ignore_index=True).dropna(subset=["nombre"])
+                    conn.update(spreadsheet=URL_SHEETS, worksheet="Estudiantes", data=df_final)
+                    st.toast("¡Guardado exitosamente en la nube!", icon="☁️")
+                    st.session_state.paso = 3
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al conectar con la base de datos: {e}. Verifique la configuración de los secretos de la app.")
             else:
-                st.error("Por favor, rellene los campos de nombres y apellidos antes de continuar.")
+                st.error("Por favor, rellene los campos de nombres y apellidos.")
 
     elif st.session_state.rol == "Tutor":
         with col1:
@@ -187,44 +198,65 @@ elif st.session_state.paso == 2:
         if c_atras.button("⬅ Regresar", use_container_width=True):
             st.session_state.paso = 1
             st.rerun()
-        if c_sig.button("Guardar Registro y Ver Grafo ➡", type="primary", use_container_width=True):
+        if c_sig.button("Guardar Registro Global ➡", type="primary", use_container_width=True):
             if nom_tut.strip() and ape_tut.strip():
-                nombre_completo = f"{nom_tut.strip()} {ape_tut.strip()}"
-                st.session_state.tutores.append({
-                    "nombre": nombre_completo, "area": area_tut, "carrera": carrera_tut,
+                nuevo_registro = pd.DataFrame([{
+                    "nombre": f"{nom_tut.strip()} {ape_tut.strip()}", "area": area_tut, "carrera": carrera_tut,
                     "materia": materia_tut, "hora_inicio": rango_horas_tut[0], "hora_fin": rango_horas_tut[1],
                     "asistencia": tipo_asistencia_tut
-                })
-                st.session_state.paso = 3
-                st.rerun()
+                }])
+                try:
+                    df_actual = conn.read(spreadsheet=URL_SHEETS, worksheet="Tutores", ttl=0)
+                    df_final = pd.concat([df_actual, nuevo_registro], ignore_index=True).dropna(subset=["nombre"])
+                    conn.update(spreadsheet=URL_SHEETS, worksheet="Tutores", data=df_final)
+                    st.toast("¡Guardado exitosamente en la nube!", icon="☁️")
+                    st.session_state.paso = 3
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al conectar con la base de datos: {e}. Verifique la configuración de los secretos de la app.")
             else:
-                st.error("Por favor, rellene los campos de nombres y apellidos antes de continuar.")
+                st.error("Por favor, rellene los campos de nombres y apellidos.")
 
 # ==========================================
-# PASO 3: VISUALIZACIÓN DEL GRAFO GENERADO
+# PASO 3: RED GLOBAL DE EMPAREJAMIENTO
 # ==========================================
 elif st.session_state.paso == 3:
-    st.subheader("🌐 Paso 3: Red de Emparejamiento Generada")
+    st.subheader("🌐 Red de Emparejamiento en Tiempo Real")
     
-    if st.button("⬅ Volver al Inicio (Registrar otro perfil)"):
+    c_izq, c_der = st.columns([1, 1])
+    if c_izq.button("⬅ Registrar otro perfil (Volver al Inicio)", use_container_width=True):
         st.session_state.paso = 1
         st.session_state.rol = None
+        st.rerun()
+    if c_der.button("🔄 Forzar Actualización / Recargar Grafo", type="primary", use_container_width=True):
         st.rerun()
         
     st.write("---")
     
+    # Cargar datos desde la nube en tiempo real anulando la caché (ttl=0)
+    try:
+        lista_estudiantes = conn.read(spreadsheet=URL_SHEETS, worksheet="Estudiantes", ttl=0).to_dict(orient="records")
+        lista_tutores = conn.read(spreadsheet=URL_SHEETS, worksheet="Tutores", ttl=0).to_dict(orient="records")
+    except Exception:
+        lista_estudiantes, lista_tutores = [], []
+        st.error("No se pudo sincronizar la red interactiva con el servidor central.")
+
     G = nx.Graph()
     
-    for est in st.session_state.estudiantes:
-        hover = f"**Estudiante:** {est['nombre']}\n**Área:** {est['area']}\n**Carrera:** {est['carrera']}\n**Materia:** {est['materia']}\n**Horario:** {est['hora_inicio']}:00 - {est['hora_fin']}:00\n**Modalidad:** {est['asistencia']}"
+    for est in lista_estudiantes:
+        if pd.isna(est.get("nombre")): continue
+        hover = f"**Estudiante:** {est['nombre']}\n**Carrera:** {est['carrera']}\n**Materia Requerida:** {est['materia']}\n**Horario:** {int(est['hora_inicio'])}:00 - {int(est['hora_fin'])}:00\n**Modalidad:** {est['asistencia']}"
         G.add_node(est["nombre"], label=est["nombre"], color="#2ecc71", title=hover, size=20)
         
-    for tut in st.session_state.tutores:
-        hover = f"**Tutor:** {tut['nombre']}\n**Área:** {tut['area']}\n**Carrera:** {tut['carrera']}\n**Materia Ofertada:** {tut['materia']}\n**Horario:** {tut['hora_inicio']}:00 - {tut['hora_fin']}:00\n**Modalidad:** {tut['asistencia']}"
+    for tut in lista_tutores:
+        if pd.isna(tut.get("nombre")): continue
+        hover = f"**Tutor:** {tut['nombre']}\n**Carrera:** {tut['carrera']}\n**Materia Ofertada:** {tut['materia']}\n**Horario:** {int(tut['hora_inicio'])}:00 - {tut['hora_fin']}:00\n**Modalidad:** {tut['asistencia']}"
         G.add_node(tut["nombre"], label=tut["nombre"], color="#9b59b6", title=hover, size=24)
         
-    for est in st.session_state.estudiantes:
-        for tut in st.session_state.tutores:
+    for est in lista_estudiantes:
+        if pd.isna(est.get("nombre")): continue
+        for tut in lista_tutores:
+            if pd.isna(tut.get("nombre")): continue
             if est["materia"] == tut["materia"]:
                 se_cruzan = (max(est["hora_inicio"], tut["hora_inicio"]) < min(est["hora_fin"], tut["hora_fin"]))
                 modalidad_compatible = (
@@ -234,12 +266,10 @@ elif st.session_state.paso == 3:
                 )
                 
                 if se_cruzan and modalidad_compatible:
-                    h_i = max(est["hora_inicio"], tut["hora_inicio"])
-                    h_f = min(est["hora_fin"], tut["hora_fin"])
-                    
+                    h_i = int(max(est["hora_inicio"], tut["hora_inicio"]))
+                    h_f = int(min(est["hora_fin"], tut["hora_fin"]))
                     asistencia_final = est["asistencia"] if est["asistencia"] != "Indiferente (Cualquiera)" else tut["asistencia"]
-                    if asistencia_final == "Ambas Modalidades":
-                        asistencia_final = "A convenir"
+                    if asistencia_final == "Ambas Modalidades": asistencia_final = "A convenir"
                         
                     G.add_edge(
                         est["nombre"], tut["nombre"], 
@@ -248,7 +278,7 @@ elif st.session_state.paso == 3:
                     )
                     
     if len(G.nodes) == 0:
-        st.info("Aún no hay perfiles procesados en la memoria volátil de esta sesión.")
+        st.info("La red se encuentra vacía. Escanea el código e ingresa los primeros perfiles.")
     else:
         net = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
         net.from_nx(G)
@@ -266,5 +296,5 @@ elif st.session_state.paso == 3:
             
     st.write("---")
     c1, c2 = st.columns(2)
-    c1.metric("Estudiantes Totales en Red", len(st.session_state.estudiantes))
-    c2.metric("Tutores Totales Activos", len(st.session_state.tutores))
+    c1.metric("Estudiantes Totales Registrados", len([e for e in lista_estudiantes if not pd.isna(e.get("nombre"))]))
+    c2.metric("Tutores Totales en Red", len([t for t in lista_tutores if not pd.isna(t.get("nombre"))]))
