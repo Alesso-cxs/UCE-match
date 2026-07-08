@@ -77,8 +77,9 @@ ESTRUCTURA_ÁREAS = {
     }
 }
 
-# 🔗 Tu nuevo enlace limpio e integrado
+# 🔗 Tu enlace de Google Sheets limpio
 URL_SHEETS = "https://docs.google.com/spreadsheets/d/1os6jZgGLayMMVu5P_ltainpvKw-VSrva9UVmW_uhwIw/"
+COLUMNAS_ESTRUCTURA = ["nombre", "area", "carrera", "materia", "hora_inicio", "hora_fin", "asistencia"]
 
 # Conexión con Google Sheets
 try:
@@ -171,14 +172,18 @@ elif st.session_state.paso == 2:
                     "asistencia": tipo_asistencia_est
                 }])
                 try:
-                    df_actual = conn.read(spreadsheet=URL_SHEETS, worksheet="Estudiantes", ttl=0)
+                    try:
+                        df_actual = conn.read(spreadsheet=URL_SHEETS, worksheet="Estudiantes", ttl=0)
+                    except Exception:
+                        df_actual = pd.DataFrame(columns=COLUMNAS_ESTRUCTURA)
+                    
                     df_final = pd.concat([df_actual, nuevo_registro], ignore_index=True).dropna(subset=["nombre"])
                     conn.update(spreadsheet=URL_SHEETS, worksheet="Estudiantes", data=df_final)
                     st.toast("¡Guardado exitosamente en la nube!", icon="☁️")
                     st.session_state.paso = 3
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error al conectar con la base de datos: {e}. Verifique la configuración de los secretos de la app.")
+                    st.error(f"Error al conectar con la base de datos: {e}. Asegúrate de que las pestañas se llamen exactamente 'Estudiantes' y 'Tutores', y que el enlace de Secrets en Streamlit Cloud sea el correcto.")
             else:
                 st.error("Por favor, rellene los campos de nombres y apellidos.")
 
@@ -206,14 +211,18 @@ elif st.session_state.paso == 2:
                     "asistencia": tipo_asistencia_tut
                 }])
                 try:
-                    df_actual = conn.read(spreadsheet=URL_SHEETS, worksheet="Tutores", ttl=0)
+                    try:
+                        df_actual = conn.read(spreadsheet=URL_SHEETS, worksheet="Tutores", ttl=0)
+                    except Exception:
+                        df_actual = pd.DataFrame(columns=COLUMNAS_ESTRUCTURA)
+                        
                     df_final = pd.concat([df_actual, nuevo_registro], ignore_index=True).dropna(subset=["nombre"])
                     conn.update(spreadsheet=URL_SHEETS, worksheet="Tutores", data=df_final)
                     st.toast("¡Guardado exitosamente en la nube!", icon="☁️")
                     st.session_state.paso = 3
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error al conectar con la base de datos: {e}. Verifique la configuración de los secretos de la app.")
+                    st.error(f"Error al conectar con la base de datos: {e}. Asegúrate de que las pestañas se llamen exactamente 'Estudiantes' y 'Tutores', y que el enlace de Secrets en Streamlit Cloud sea el correcto.")
             else:
                 st.error("Por favor, rellene los campos de nombres y apellidos.")
 
@@ -233,13 +242,15 @@ elif st.session_state.paso == 3:
         
     st.write("---")
     
-    # Cargar datos desde la nube en tiempo real anulando la caché (ttl=0)
     try:
         lista_estudiantes = conn.read(spreadsheet=URL_SHEETS, worksheet="Estudiantes", ttl=0).to_dict(orient="records")
+    except Exception:
+        lista_estudiantes = []
+        
+    try:
         lista_tutores = conn.read(spreadsheet=URL_SHEETS, worksheet="Tutores", ttl=0).to_dict(orient="records")
     except Exception:
-        lista_estudiantes, lista_tutores = [], []
-        st.error("No se pudo sincronizar la red interactiva con el servidor central.")
+        lista_tutores = []
 
     G = nx.Graph()
     
